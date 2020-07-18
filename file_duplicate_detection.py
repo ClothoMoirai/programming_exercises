@@ -7,7 +7,6 @@ import hashlib
 import os
 from typing import List
 from collections import defaultdict
-from pprint import pprint as displayprint
 
 # Depending on usage it can be useful to exclude directories that are expected to change rapidly
 exclude_dirs = ['.cache', '.config']
