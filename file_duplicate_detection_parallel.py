@@ -7,11 +7,12 @@ import hashlib
 import os
 from typing import List
 from multiprocessing import Pool
+from collections import defaultdict
 
 # Depending on usage it can be useful to exclude directories that are expected to change rapidly
 exclude_dirs = ['.cache', '.config']
 # temporary hardcoding during development
-basedir = '~/'
+basedir = '~/test'
 # blocksize for hashing
 blocksize = 65536
 # Hash algorithm desired
@@ -26,18 +27,12 @@ def islink(filename: str) -> bool:
 
 def isfile(filename: str) -> bool:
     # for this purpose we want to exclude links.
-    if not islink(filename):
-        return os.path.isfile(filename)
-    else:
-        return False
+    return os.path.isfile(filename) and not islink(filename)
 
 
 def isdir(filename: str) -> bool:
     # for this purpose we want to exclude links.
-    if not islink(filename):
-        return os.path.isdir(filename)
-    else:
-        return False
+    return os.path.isdir(filename) and not islink(filename)
 
 
 def get_file_stats(filename: str) -> dict:
@@ -61,24 +56,32 @@ def generate_file_list(path: str) -> List[str]:
 
 
 def concatonate_stat_dicts(stat_dict_list: List[dict]) -> dict:
-    return_stats_dict = {'size': {}, 'hardlinks': {}}
+    return_stats_dict = {'size': defaultdict(list), 'hardlinks': defaultdict(list)}
     for this_file_dict in stat_dict_list:
-        if this_file_dict['size'] in return_stats_dict['size']:
-            return_stats_dict['size'][this_file_dict['size']].append(this_file_dict['filename'])
-        else:
-            return_stats_dict['size'][this_file_dict['size']] = [this_file_dict['filename']]
+        return_stats_dict['size'][this_file_dict['size']].append(this_file_dict['filename'])
         if 'hardlinks' in this_file_dict:
-            if this_file_dict['hardlinks'] in return_stats_dict['hardlinks']:
-                return_stats_dict['hardlinks'][this_file_dict['hardlinks']].append(this_file_dict['filename'])
-            else:
-                return_stats_dict['hardlinks'][this_file_dict['hardlinks']] = [this_file_dict['filename']]
+            return_stats_dict['hardlinks'][this_file_dict['hardlinks']].append(this_file_dict['filename'])
     return return_stats_dict
 
 
 def run_file_stats(file_list: List[str]) -> dict:
+    # Multiprocessing this doesn't gain much; about 0.5-1 second in my testing.
+    # files_dict = {'size': {}, 'hardlinks': {}}
+    # for this_file in file_list:
+    #     stats_dict = get_file_stats(this_file)
+    #     if not stats_dict['size'] in files_dict['size']:
+    #         files_dict['size'][stats_dict['size']] = [this_file]
+    #     else:
+    #         files_dict['size'][stats_dict['size']].append(this_file)
+    #     if 'hardlinks' in stats_dict:
+    #         if not stats_dict['hardlinks'] in files_dict['hardlinks']:
+    #             files_dict['hardlinks'][stats_dict['hardlinks']] = [this_file]
+    #         else:
+    #             files_dict['hardlinks'][stats_dict['hardlinks']].append(this_file)
     stats_pool = Pool(processes=parallel)
     file_stats_list = stats_pool.map(get_file_stats, file_list)
-    return concatonate_stat_dicts(file_stats_list)
+    files_dict = concatonate_stat_dicts(file_stats_list)
+    return files_dict
 
 
 def scan_directory(path: str) -> dict:
@@ -88,14 +91,11 @@ def scan_directory(path: str) -> dict:
 
 
 def clear_single_entries(sub_dict: dict) -> dict:
-    remove_keys = [key for key in sub_dict if len(sub_dict[key]) < 2]
-    for this_key in remove_keys:
-        sub_dict.pop(this_key)
-    return sub_dict
+    return {k: v for k, v in sub_dict.items() if len(v) > 1}
 
 
 def dict_values_to_list(source_dict: dict) -> List[List[str]]:
-    return [source_dict[key] for key in source_dict if len(source_dict[key]) > 1]
+    return [v for v in source_dict.values() if len(v) > 1]
 
 
 def clean_stat_dict(files_dict: dict) -> dict:
@@ -106,39 +106,32 @@ def clean_stat_dict(files_dict: dict) -> dict:
 
 
 # noinspection SpellCheckingInspection
-def hash_this_file(file_list: List) -> dict:
-    read_this_file = ''
-    file_hashes_dict = {}
-    for this_file in file_list:
-        # noinspection PyBroadException
-        try:
-            read_this_file = open(this_file, 'rb')
-        except:
-            read_this_file.close()
-            continue
-        else:
-            hasher = hashlib.new(hash_algo)
-            my_buffer = read_this_file.read(blocksize)
-            while len(my_buffer) > 0:
-                hasher.update(my_buffer)
-                my_buffer = read_this_file.read(blocksize)
-        if hasher.hexdigest() not in file_hashes_dict:
-            file_hashes_dict[hasher.hexdigest()] = [this_file]
-        else:
-            file_hashes_dict[hasher.hexdigest()].append(this_file)
-    return file_hashes_dict
+def hash_this_file(this_file: str) -> dict:
+    with open(this_file, 'rb') as read_this_file:
+        hasher = hashlib.new(hash_algo)
+        for my_buffer in iter(read_this_file.read, b''):
+            hasher.update(my_buffer)
+    return {hasher.hexdigest(): this_file}
 
 
 def get_file_hashes(file_size_dict: dict) -> dict:
-    file_hashes_dict = {}
+    file_hashes_dict = defaultdict(list)
+    hash_file_list = []
+    for file_list in file_size_dict.values():
+        for this_file in file_list:
+            if os.access(this_file, os.R_OK):
+                hash_file_list.append(this_file)
     # If you want single-thread
-    # for this_file in file_size_dict.values():
-    #    file_hashes_dict.update(hash_this_file(this_file))
+    # for this_file in hash_file_list:
+    #     this_hash_dict = hash_this_file(this_file)
+    #     for key in this_hash_dict:
+    #         file_hashes_dict[key].append(this_hash_dict[key])
     mypool = Pool(processes=parallel)
-    list_of_dicts = mypool.map(hash_this_file, file_size_dict.values())
+    list_of_dicts = mypool.map(hash_this_file, hash_file_list)
     mypool.close()
     for this_dict in list_of_dicts:
-        file_hashes_dict.update(this_dict)
+        for key in this_dict:
+            file_hashes_dict[key].append(this_dict[key])
     return file_hashes_dict
 
 
@@ -153,7 +146,6 @@ def main(mydir: str) -> dict:
         dup_dict = clean_stat_dict(scan_directory(mydir))
         dup_dict['duplicates'] = get_duplicate_files(dup_dict['size'])
         dup_dict.pop('size')
-        # dataprint(dup_dict)
         return dup_dict
     else:
         print('{} is not a directory.'.format(mydir))
