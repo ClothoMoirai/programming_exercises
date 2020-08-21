@@ -6,7 +6,7 @@ start_value = 1
 end_value = 100
 
 
-def Fizz_or_Buzz(this_number) -> None:
+def fizz_or_buzz(this_number: int) -> None:
     # If it meets the criteria return the word(s) else return the digit as string
     result_string = ''
     for this_value in sorted(conditions_dict):
@@ -19,7 +19,7 @@ def Fizz_or_Buzz(this_number) -> None:
 
 def main() -> None:
     for this_number in range(start_value, end_value + 1):
-        Fizz_or_Buzz(this_number)
+        fizz_or_buzz(this_number)
 
 
 main()
