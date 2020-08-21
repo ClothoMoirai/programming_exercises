@@ -1,4 +1,5 @@
 # A FizzBuzz program.
+# Add additional criteria to this dict.
 
 conditions_dict = {3: "Fizz", 5: "Buzz"}
 start_value = 1
