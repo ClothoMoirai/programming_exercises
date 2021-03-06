@@ -12,3 +12,5 @@ I do tend to use a lot of functions. That's mostly keeping in practice for large
 - **file_duplicate_detection.py** - Single-thread duplicate file finder that returns a dict with duplicates and any that are hardlinks.
 - **file_duplicate_detection_parallel.py** - Like above but using multiprocessing some parts that can be done in parallel. Roughly halved the time needed on my little desktop.
 - **split_csv.sh** - looks for any .csv files and splits them into two on the basis of line count. Written to assist another tech worker.
+- **Product_or_Sum.py** - a Project Euler exercise; return the product of two user-entered numbers unless that would be over 1000; if so then return the sum.
+- **du.py** - Exercise to implement du(1) in Python.
